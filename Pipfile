@@ -9,6 +9,7 @@ verify_ssl = true
 jupyter = "*"
 tweepy = "*"
 python-dotenv = "*"
+ipdb = "*"
 
 [requires]
 python_version = "3.7"
