@@ -1,10 +1,12 @@
 import os
 import tweepy
+import time
+from neo4j import GraphDatabase
 from dotenv import load_dotenv
-from py2neo import Graph, Node, Relationship
-from retrying import retry
 from pprint import pprint
-from objects import Tweet, User
+# from py2neo import Graph
+# from objects import MyStreamListener
+# from retrying import retry
 
 load_dotenv()
 
@@ -13,12 +15,66 @@ consumer_secret = os.getenv('CONSUMER_SECRET')
 access_token = os.getenv('ACCESS_TOKEN')
 access_token_secret = os.getenv('ACCESS_TOKEN_SECRET')
 
-class MyStreamListener(tweepy.StreamListener):
+# this uses neo4j python driver
+class AnotherStreamListener(tweepy.StreamListener):
+    STATEMENT = ("UNWIND {tweets} AS t\n" +
+            "WITH t,\n" +
+            "     t.entities AS e,\n" +
+            "     t.user AS u,\n" +
+            "     t.retweeted_status AS retweet,\n" +
+            "     t.quoted_status AS quoted\n" +
+            "WHERE t.id is not null " +
+            "MERGE (tweet:Tweet {id:t.id})\n" +
+            "SET tweet.text = t.text,\n" +
+            "    tweet.created = t.created_at,\n" +
+            "    tweet.favorites = t.favorite_count\n" +
+            "MERGE (user:User {id:u.id})\n" +
+            "SET user.name = u.name,\n" +
+            "    user.username = u.screen_name,\n" +
+            "    user.location = u.location,\n" +
+            "    user.followers = u.followers_count,\n" +
+            "    user.following = u.friends_count,\n" +
+            "    user.statuses = u.statuses_count,\n" +
+            "    user.profile_image_url = u.profile_image_url\n" +
+            "MERGE (user)-[:POSTED]->(tweet)\n" +
+            "FOREACH (m IN e.user_mentions |\n" +
+            "  MERGE (mentioned:User {id:m.id})\n" +
+            "  ON CREATE SET mentioned.name = m.name,\n" +
+            "                mentioned.username = m.screen_name\n" +
+            "  MERGE (tweet)-[:MENTIONED]->(mentioned)\n" +
+            ")\n" +
+            "FOREACH (r IN [r IN [t.in_reply_to_status_id] WHERE r IS NOT NULL] |\n" +
+            "  MERGE (reply_tweet:Tweet {id:r})\n" +
+            "  MERGE (replier:User {id:t.in_reply_to_user_id})\n" +
+            "  ON CREATE SET replier.username = t.in_reply_to_screen_name\n" +
+            "  MERGE (tweet)-[:REPLIED_TO]->(reply_tweet)\n" +
+            "  MERGE (replier)-[:POSTED]->(reply_tweet)\n" +
+            ")\n" +
+            "FOREACH (quoted_id IN [x IN [quoted.id] WHERE x IS NOT NULL] |\n" +
+            "    MERGE (quoted_tweet:Tweet {id:quoted_id})\n" +
+            "    MERGE (quoted_user:User {id:quoted.user.id})\n" +
+            # We could set more props considering retweet_status and quoted_status are full tweet objects
+            "    ON CREATE SET quoted_user.name = quoted.user.name,\n" +
+            "                  quoted_user.username = quoted.user.screen_name\n" +
+            "    MERGE (tweet)-[:RETWEETED]->(quoted_tweet)\n" +
+            "    MERGE (quoted_user)-[:POSTED]->(quoted_tweet)\n" +
+            ")\n" +
+            "FOREACH (retweet_id IN [x IN [retweet.id] WHERE x IS NOT NULL] |\n" +
+            "    MERGE (retweet_tweet:Tweet {id:retweet_id})\n" +
+            "    MERGE (retweet_user:User {id:retweet.user.id})\n" +
+            "    ON CREATE SET retweet_user.name = retweet.user.name,\n" +
+            "                  retweet_user.username = retweet.user.screen_name\n" +
+            "    MERGE (tweet)-[:RETWEETED]->(retweet_tweet)\n" +
+            "    MERGE (retweet_user)-[:POSTED]->(retweet_tweet)\n" +
+            ")")
+
     def __init__(self):
         super().__init__()
         self.count = 1
-        graph.run("CREATE CONSTRAINT ON (t:Tweet) ASSERT t.id IS UNIQUE")
-        graph.run("CREATE CONSTRAINT ON (u:User) ASSERT u.id IS UNIQUE")
+        self.db = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "1234"))
+        with self.db.session() as db:
+            db.run("CREATE CONSTRAINT ON (t:Tweet) ASSERT t.id IS UNIQUE")
+            db.run("CREATE CONSTRAINT ON (u:User) ASSERT u.id IS UNIQUE")
 
     def on_status(self, tweet):
         print("==================COUNT: {}==================".format(self.count))
@@ -29,74 +85,30 @@ class MyStreamListener(tweepy.StreamListener):
         except Exception as e:
             print("ERROR: ",e)
 
-
     def on_error(self, status_code):
         print("Error code: ", status_code)
 
-    @retry(wait_fixed=5000)
     def run_stream(self,auth):
         stream = tweepy.Stream(auth=auth, listener=self, timeout=5, retry_420_start=5)
         try:
-            print("listener starting...")
+            print("AnotherStream starting...")
             stream.filter(locations=[-130.56,23.59,-77.09,48.77])
         except Exception as e:
             print(e)
             print(e.__doc__)
 
-
     def run_transaction(self, t):
         t = t._json
-        user = self.user_node(t['user'])
-        tweet = self.tweet_node(t)
-        if t.get('in_reply_to_status_id'):
-            replied = self.replied_node(t)
-            tweet.replied_to.add(replied)
-
-        user.tweeted.add(tweet)
-        graph.push(user)
-
-        if t.get('retweeted_status') or t.get('quoted_status'):
-            t2 = t.get('retweeted_status') or t.get('quoted_status')
-            retweet = self.tweet_node(t2)
-            if t2.get('in_reply_to_status_id'):
-                replied2 = self.replied_node(t2)
-                tweet.replied_to.add(replied2)
+        with self.db.session() as db:
+            result = db.run(self.STATEMENT, {"tweets": t})
+            print(result.summary().notifications)
+            pprint(result.data())
 
 
-            tweet.retweeted.add(retweet)
-            user2 = self.user_node(t2['user'])
-            user2.tweeted.add(tweet)
-            graph.push(user2)
-
-    # Handle replied user here
-    def replied_node(self, t):
-        replied = Tweet()
-        replied.id = t['in_reply_to_status_id']
-        replied_user = self.user_node(None, t['in_reply_to_user_id'], t['in_reply_to_screen_name'])
-        replied_user.tweeted.add(replied)
-        graph.push(replied_user)
-        return replied
-
-    def tweet_node(self, t, id=None, text=None):
-        tweet = Tweet()
-        tweet.id = id or t['id']
-        tweet.text = text or t['text']
-        for m in t['entities']['user_mentions']:
-            mentioned = self.user_node(m)
-            tweet.mentioned.add(mentioned)
-        return tweet
-
-    def user_node(self, t, id=None, screen_name=None):
-        user = User()
-        user.id = id or t['id']
-        user.username = screen_name or t['screen_name']
-        return user
-
-
-graph = Graph(password='1234')
+# graph = Graph(password='1234')
 auth = tweepy.OAuthHandler(consumer_token, consumer_secret)
 auth.set_access_token(access_token, access_token_secret)
 api = tweepy.API(auth)
 
-listener = MyStreamListener()
+listener = AnotherStreamListener()
 listener.run_stream(auth=api.auth)
