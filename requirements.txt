@@ -34,7 +34,9 @@ neo4j==1.7.2
 neobolt==1.7.4
 neotime==1.7.4
 notebook==5.7.8
+numpy==1.16.2
 oauthlib==3.0.1
+pandas==0.24.2
 pandocfilters==1.4.2
 parso==0.4.0
 pexpect==4.6.0
@@ -50,6 +52,7 @@ pyrsistent==0.14.11
 pysocks==1.6.8
 python-dateutil==2.8.0
 python-dotenv==0.10.1
+python-igraph==0.7.1.post6
 pytz==2018.9
 pyzmq==18.0.1
 qtconsole==4.4.3

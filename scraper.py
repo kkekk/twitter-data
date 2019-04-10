@@ -52,6 +52,8 @@ class AnotherStreamListener(tweepy.StreamListener):
             ")\n" +
             "FOREACH (quoted_id IN [x IN [quoted.id] WHERE x IS NOT NULL] |\n" +
             "    MERGE (quoted_tweet:Tweet {id:quoted_id})\n" +
+            "    ON CREATE SET quoted_tweet.text = quoted.text,\n" +
+            "                  quoted_tweet.created = quoted.tweet.created_at\n" +
             "    MERGE (quoted_user:User {id:quoted.user.id})\n" +
             # We could set more props considering retweet_status and quoted_status are full tweet objects
             "    ON CREATE SET quoted_user.name = quoted.user.name,\n" +
@@ -61,6 +63,8 @@ class AnotherStreamListener(tweepy.StreamListener):
             ")\n" +
             "FOREACH (retweet_id IN [x IN [retweet.id] WHERE x IS NOT NULL] |\n" +
             "    MERGE (retweet_tweet:Tweet {id:retweet_id})\n" +
+            "    ON CREATE SET retweet_tweet.text = retweet.text,\n" +
+            "                  retweet_tweet.created = retweet.tweet.created_at\n" +
             "    MERGE (retweet_user:User {id:retweet.user.id})\n" +
             "    ON CREATE SET retweet_user.name = retweet.user.name,\n" +
             "                  retweet_user.username = retweet.user.screen_name\n" +
@@ -77,6 +81,8 @@ class AnotherStreamListener(tweepy.StreamListener):
             db.run("CREATE CONSTRAINT ON (u:User) ASSERT u.id IS UNIQUE")
 
     def on_status(self, tweet):
+        if self.count == 10000:
+            return false
         print("==================COUNT: {}==================".format(self.count))
         print(tweet.text)
         try:

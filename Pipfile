@@ -74,6 +74,8 @@ jupyter_client = "==5.2.4"
 prometheus_client = "==0.6.0"
 pyOpenSSL = "==19.0.0"
 neo4j = "*"
+pandas = "*"
+python-igraph = "*"
 
 [requires]
 python_version = "3.6.6"
