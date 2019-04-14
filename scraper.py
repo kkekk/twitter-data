@@ -82,7 +82,7 @@ class AnotherStreamListener(tweepy.StreamListener):
 
     def on_status(self, tweet):
         if self.count == 10000:
-            return false
+            return False
         print("==================COUNT: {}==================".format(self.count))
         print(tweet.text)
         try:
