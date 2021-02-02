@@ -1,8 +1,8 @@
--i https://pypi.org/simple
+-i https://pypi.org/simple/
 asn1crypto==0.24.0
 attrs==19.1.0
 backcall==0.1.0
-bleach==3.1.0
+bleach==3.3.0
 certifi==2019.3.9
 cffi==1.12.2
 chardet==3.0.4
@@ -34,8 +34,9 @@ neo4j==1.7.2
 neobolt==1.7.4
 neotime==1.7.4
 notebook==5.7.8
-numpy==1.16.2
+numpy==1.19.5
 oauthlib==3.0.1
+packaging==20.9
 pandas==0.24.2
 pandocfilters==1.4.2
 parso==0.4.0
@@ -48,6 +49,7 @@ py2neo==4.2.0
 pycparser==2.19
 pygments==2.3.1
 pyopenssl==19.0.0
+pyparsing==2.4.7
 pyrsistent==0.14.11
 pysocks==1.6.8
 python-dateutil==2.8.0
